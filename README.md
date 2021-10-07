@@ -93,19 +93,19 @@ struct xlnx_dma_desc {
 In NVIDIA jetson-rdma-picoevb, the descriptor is initialized as (see Tables 5 and 6 in PG195)
 
 ```C
-	// Create descriptor
-	desc = pevb->descs_ptr;
-	desc->control = XLNX_DMA_DESC_CONTROL_MAGIC |
-		XLNX_DMA_DESC_CONTROL_EOP |
-		XLNX_DMA_DESC_CONTROL_COMPLETED |
-		XLNX_DMA_DESC_CONTROL_STOP;
-	desc->len        = len;
-	desc->src_adr    = pcie_addr & 0xffffffffU;
-	desc->src_adr_hi = pcie_addr >> 32;
-	desc->dst_adr    = ram_offset & 0xffffffffU;
-	desc->dst_adr_hi = ram_offset >> 32;
-	desc->nxt_adr    = 0;
-	desc->nxt_adr_hi = 0;
+// Create descriptor
+desc = pevb->descs_ptr;
+desc->control = XLNX_DMA_DESC_CONTROL_MAGIC |
+	XLNX_DMA_DESC_CONTROL_EOP |
+	XLNX_DMA_DESC_CONTROL_COMPLETED |
+	XLNX_DMA_DESC_CONTROL_STOP;
+desc->len        = len;
+desc->src_adr    = pcie_addr & 0xffffffffU;
+desc->src_adr_hi = pcie_addr >> 32;
+desc->dst_adr    = ram_offset & 0xffffffffU;
+desc->dst_adr_hi = ram_offset >> 32;
+desc->nxt_adr    = 0;
+desc->nxt_adr_hi = 0;
 ```
 
 Note that the addresses in the descriptor should all be PCI-e **bus addresses** to be accessed by PCI-e devices.
@@ -118,4 +118,72 @@ With VFIO, the PCI-e bus addresses can be replaced simply by user **virtual addr
 
 ## Data coherence
 
-(an critical topic)
+(a critical topic)
+
+**Re: [vfio-users] VFIO and coherency with DMA**
+
+https://listman.redhat.com/archives/vfio-users/2020-February/msg00005.html
+
+> From: Alex Williamson <alex williamson redhat com> <br />
+> To: "Stark, Derek" <Derek Stark molex com> <br />
+> Cc: "vfio-users redhat com" <vfio-users redhat com> <br />
+> Subject: Re: [vfio-users] VFIO and coherency with DMA <br />
+> Date: Thu, 13 Feb 2020 09:16:48 -0700 <br />
+
+On Thu, 13 Feb 2020 10:02:26 +0000
+
+"Stark, Derek" <Derek Stark molex com> wrote:
+
+> Hello,
+> 
+> I've been experimenting with VFIO with one of our FPGA cards using a
+> Xilinx part and XDMA IP core. It's been smooth progress so far and
+> I've had no issues with bar access and also DMA mapping/transfers to
+> and from the card. All in all, I'm finding it a very nice userspace
+> driver framework.
+> 
+> I'm hoping someone can help clarify my understanding of how VFIO
+> works for DMA in terms of coherence. I'm on a standard x86_64 Intel
+> Xeon platform.
+> 
+> In the  code I see: ```(/include/uapi/linux/vfio.h)```
+> ```C
+> /* 
+> * IOMMU enforces DMA cache coherence (ex. PCIe NoSnoop stripping).  This
+> * capability is subject to change as groups are added or removed.
+> */ 
+>
+> #define VFIO_DMA_CC_IOMMU                               4
+> ```
+>
+> Which implies that IOMMU sets the mappings up as coherent.... is this
+> understanding correct?
+
+No, this is a mechanism for reporting the cache coherency of the IOMMU.
+For example, KVM uses this to understand whether it needs to emulate
+wbinv instructions for cases where the DMA is not coherent.  There's
+nothing vfio can specifically do in the IOMMU mapping to make a DMA
+coherent afaik.
+
+> I'm more used to having scatter gather based DMAs where you need to
+> sync for the CPU or the device depending upon who owns/accesses the
+> memory.
+> 
+> The use case I am specifically looking at is if a DMA mapping is
+> setup through VFIO and then left open whilst data is transferred from
+> the device to host memory and then the CPU is processing this data.
+> The pinned/mapped data buffer is reused repeatedly as part of a ring
+> of buffers. It's only at the point of closing down this application
+> that the buffer would be unmapped in vfio.
+> 
+> Is there any sync type functions or equivalents I need to be aware of
+> in this case? Can VFIO DMA mapped memory buffers be safely used in
+> this way?
+
+It can, but you need to test that cache coherence extension above to
+know whether the processor is coherent with DMA.  If it's not then you
+need to invalidate the processor cache before you pull in new data from
+the device or else you might just be re-reading stale data from the
+cache.  Thanks,
+
+Alex
