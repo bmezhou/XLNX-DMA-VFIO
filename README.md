@@ -3,10 +3,13 @@
 
 # Xilinx DMA with VFIO introduction
 
-The **feasibility** of Xilinx DMA subsystem for PCIe working with VFIO (user space driver) is investigated in this project.
+The **feasibility** of Xilinx DMA subsystem for PCIe working with VFIO (user space driver) is investigated in this repository.
 
 * VFIO: Virtual Function I/O (https://www.kernel.org/doc/html/latest/driver-api/vfio.html)
 * Xilinx DMA: Xilinx DMA/bridge subsystem for PCI Express (PCIe) implements a high performance, configurable scatter gather DMA for use with the PCI Express 2.1 and 3.x integrated block (https://www.xilinx.com/support/documentation/ip_documentation/xdma/v4_1/pg195-pcie-dma.pdf)
+
+The idea is inspired by the repository NVIDIA jetson-rdma-picoevb 
+(https://github.com/NVIDIA/jetson-rdma-picoevb)
 
 # Some Marcos and auxiliary functions
 
