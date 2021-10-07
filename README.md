@@ -70,12 +70,13 @@ The basic steps of Xilinx DMA in kernel mode driver are composed of
 3. Map DMA addresses and buffers
 4. Structure descriptor chain list
 5. Start DMA operation
+6. Unmap the DMA buffers
 
-HOwever, in VFIO module, steps 1-3 are performed internally. Steps 4-5 have to be done in user-space program.
+In VFIO module, steps 1-3 are performed implicitly by ```ioctl()```. Steps 4-5 have to be done explicitly by user-space program. Step 6 is left to be tested. (See Section **Data coherence**)
 
 ## Descriptors (or structure fields)
 
-According to Xilinx document PG-195, the descriptor format is defined as
+According to Xilinx document PG-195, for example, the descriptor format is defined as
 
 ```C
 struct xlnx_dma_desc {
@@ -90,7 +91,7 @@ struct xlnx_dma_desc {
 } __packed;
 ```
 
-In NVIDIA jetson-rdma-picoevb, the descriptor is initialized as (see Tables 5 and 6 in PG195)
+For example, in NVIDIA jetson-rdma-picoevb, the descriptor is initialized as
 
 ```C
 // Create descriptor
@@ -110,9 +111,36 @@ desc->nxt_adr_hi = 0;
 
 Note that the addresses in the descriptor should all be PCI-e **bus addresses** to be accessed by PCI-e devices.
 
-With VFIO, the PCI-e bus addresses can be replaced simply by user **virtual address**. In this repository, function build_link() performs this.
+With VFIO, the PCI-e bus addresses can be replaced simply by user **virtual address**. In this repository, function ```build_sgt()``` is for this purpose.
 
 ## SG-DMA initialization
+
+The DMA operation is initialized by writing a range of registers, e.g.,
+
+* Feed descriptor address (location)
+* Enable IRQs
+* Arm Performance counters
+* Start DMA (see the following code)
+
+```C
+reg = XLNX_REG(H2C, 0, H2C_CTRL) + chan_offset;
+val = (XLNX_DMA_H2C_CTRL_IE_DESC_ERR_MASK <<
+		XLNX_DMA_H2C_CTRL_IE_DESC_ERR_SHIFT) |
+	(XLNX_DMA_H2C_CTRL_IE_WRITE_ERR_MASK <<
+		XLNX_DMA_H2C_CTRL_IE_WRITE_ERR_SHIFT) |
+	(XLNX_DMA_H2C_CTRL_IE_READ_ERR_MASK <<
+		XLNX_DMA_H2C_CTRL_IE_READ_ERR_SHIFT) |
+	XLNX_DMA_H2C_CTRL_IE_IDLE_STOPPED |
+	XLNX_DMA_H2C_CTRL_IE_INVALID_LEN |
+	XLNX_DMA_H2C_CTRL_IE_MAGIC_STOPPED |
+	XLNX_DMA_H2C_CTRL_IE_ALIGN_MISMATCH |
+	XLNX_DMA_H2C_CTRL_IE_DESC_COMPLETED |
+	XLNX_DMA_H2C_CTRL_IE_DESC_STOPPED |
+	XLNX_DMA_H2C_CTRL_RUN;
+
+pevb_writel(pevb, BAR_DMA, val, reg);
+```
+Upon finishing the DMA operations, registers should be reset and resources should be released.
 
 
 
